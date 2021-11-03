@@ -159,12 +159,38 @@ def sum_precip(monthly, months, years='all', name="Summed-Precip"):
     return precip_sum
 
 def get_start_next_month(date):
+    """
+    Parameters
+    ----------
+    date: datetime.datetime
+
+    Returns
+    -------
+    datetime.datetime
+        date of the start of the next month
+    """
     if date.month+1 <= 12:
         return datetime(date.year,date.month+1,1)  
     return datetime(date.year+1,1,1) ## its next yearnext year
 
 def sum_element_by_date_range(monthly, start, end, row, col):
-    """
+    """sum a season based on start and end dates. Fractional protion of months
+    is calculated.
+
+    Parameters
+    ----------
+    monthly: TemporalGrid
+        monthly precip data
+    start: np.datetime64
+    end: np.datetime64
+    row: int
+    col: int
+    
+
+    Returns
+    -------
+    float
+        sum of seasonal precip 
     """
 
     start = datetime.fromisoformat(str(start))
@@ -215,6 +241,21 @@ def sum_element_by_date_range(monthly, start, end, row, col):
     return data.sum()
 
 def sum_grids_by_date_ranges(monthly, dates):
+    """
+    calculates seasonal precip based on date ranges
+
+    Parameters
+    ----------
+    monthly: TemporalGrid
+        monthly precip data
+    dates: TemporalGrid
+        dates grid with alternating freezing then thawing dates
+
+    
+    Returns
+    -------
+    np.array with shape (n_year, row, cols)
+    """
 
     grid_shape = monthly.config['grid_shape']
     n_years = dates.config['num_grids']//2
@@ -246,6 +287,20 @@ def sum_grids_from_date(monthly, dates, n_days):
     takes the starte date from the dates map and adds n_days to create end dates
     `dates` data is sameformat as in sum_grids_by_date_ranges but the 
     end bound is ignored and then recalculated
+
+    Parameters
+    ----------
+    monthly: TemporalGrid
+        monthly precip data
+    dates: TemporalGrid
+        dates grid with alternating freezing then thawing dates
+    n_days: int
+        override for season length, if this is used the end date for 
+        the seasion is the thawing data my n_days from freezing date
+    
+    Returns
+    -------
+    np.array with shape (n_year, row, cols)
     """
     grid_shape = monthly.config['grid_shape']
     n_years = dates.config['num_grids']//2
@@ -274,12 +329,28 @@ def sum_grids_from_date(monthly, dates, n_days):
 def sum_seasonal_2(monthly, dates, n_days=None, start_year=0, 
         name="Summed-Precip"
     ):
+    """calculates seasonal precip based on freezing/thawing dates
 
-    # data = []
-    # for day_range in day_ranges:
-    #     data.append(sum_by_date_range(monthly, day_range[0], day_range[1]))
-    # precip_sum = np.array(data)
+    parameters
+    ----------
+    monthly: TemporalGrid
+        monthly precip data
+    dates: TemporalGrid
+        dates grid with alternating freezing then thawing dates
+    n_days: int or None, optional
+        override for season length, if this is used the end date for 
+        the seasion is the thawing data my n_days from freezing date
+    start_year: int, default 0
+        start year for labeling 
+    name: str
+        name used for labeling
 
+    returns
+    -------
+    TemporalGrid
+        the seasonal precip
+
+    """
     if n_days: ## season based on length
         precip_sum = sum_grids_from_date(monthly, dates, n_days) 
     else: ## season based on bounds
@@ -301,6 +372,26 @@ def sum_seasonal_2(monthly, dates, n_days=None, start_year=0,
 
 
 def root_mg_to_date_mg(roots, start_date, skip_at_start=0, skip_at_end=None):
+    """convert TemporalGrid of roots to TemporalGrid of dates
+
+    Parameters
+    ----------
+    roots: TemporalGrid
+        the roots data, where -numbers represent freezing roots and + numbers
+        thawing roots. The absolunte value of each root is the number of 
+        days from the start_date
+    start_date: datetime.datetime
+        day '0' for roots
+    skip_at_start: int default 0
+        number of roots to skip at start
+    skip_at_end: int, default None
+        number of roots to skip at end
+
+    Returns
+    -------
+    TemporalGrid
+        type is np.datetime64 
+    """
 
     skip = skip_at_start + skip_at_end if skip_at_end else 0
 

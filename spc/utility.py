@@ -11,7 +11,8 @@ from multigrids import tools
 import CLILib 
 
 
-import os
+import os, sys
+import numpy as np
 
 import seasonal 
 
@@ -34,7 +35,7 @@ def utility ():
 
     Flags
     -----
-        --monthly-data-directory: path
+        --monthly-data: path
             input monthly raster data
         --out-directory: path
             Directory to save results at
@@ -68,12 +69,12 @@ def utility ():
         
     Example
     -------
-        python spc/utility.py --monthly-data-directory=./ --out-directory=./ 
+        python spc/utility.py --monthly-data=./ --out-directory=./ 
             --season=winter --sort-method=snap
     """
     try:
         arguments = CLILib.CLI(
-            ['--monthly-data-directory', '--out-directory'],
+            ['--monthly-data', '--out-directory'],
             [
             '--sort-method', '--season', '--method',
             '--roots-directory', '--roots-file',
@@ -99,7 +100,7 @@ def utility ():
         return
 
     monthly = seasonal.load_monthly_data(
-        arguments['--monthly-data-directory'], sort_func=sort_fn
+        arguments['--monthly-data'], sort_func=sort_fn
     )
 
     if arguments['--method'] is None or arguments['--method'] == 'monthly':
@@ -114,6 +115,7 @@ def utility ():
     elif arguments['--method'] == 'roots':
 
         if arguments['--roots-file']:
+            print(' roots file')
             roots = TemporalGrid(arguments['--roots-file'])
         elif arguments['--roots-directory']:
             load_params = {
@@ -139,10 +141,29 @@ def utility ():
         year, month = [int(i) for i in key.split('-')]
         start_date = datetime(year, month, 1)
         # print(start_date)
-        dates = seasonal.root_mg_to_date_mg(roots, start_date, 1, 1)
 
+        try:
+            season_name, season_length = arguments['--season-length'].split('-')
+        except ValueError:
+            season_name = arguments['--season-length']
+            season_length = None
 
-        summed = seasonal.sum_seasonal_2(monthly, dates, arguments['--season-length']) 
+        if season_name == 'summer':
+            dates = seasonal.root_mg_to_date_mg(roots, start_date) # don't need to skip ends
+        elif  season_name == 'winter':
+            dates = seasonal.root_mg_to_date_mg(roots, start_date, 1, 1)
+        # print(dates)
+
+        # try:
+        monthly.config['start_timestep'] = 0
+        print(monthly.config['description'])
+        summed = seasonal.sum_seasonal_2(
+            monthly, dates, season_length, season_name
+        ) 
+        # except IndexError as e:
+        #     print (e)
+        #     sys.exit()
+
         summed.config['start_timestep'] = year
         summed.config['raster_metadata'] = monthly.config['raster_metadata']
 
@@ -165,6 +186,7 @@ def utility ():
             arguments['--out-format'] == 'tiff' :
         summed.save_all_as_geotiff(arguments['--out-directory'])
     elif arguments['--out-format'] == 'multigrid':
+        summed.config['command-used-to-create'] = ' '.join(sys.argv)
         summed.save(
             os.path.join(
                 arguments['--out-directory'], 

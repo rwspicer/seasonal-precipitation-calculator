@@ -120,6 +120,8 @@ class MultiGrid (object):
         self.config, self.grids = init_func(*args, **kwargs)
         self.config['multigrids_version'] =  __version__
 
+        self.__temp__ = False
+
 
     def __del__ (self):
         """deconstructor for class"""
@@ -127,6 +129,11 @@ class MultiGrid (object):
             del(self.config)
         if hasattr(self, 'grids'):
             del(self.grids)
+
+        if self.__temp__:
+            print(self.__temp_file__)
+            os.remove(self.__temp_file__)
+        
 
     # def __getattr__(self, attr):
     #     """get attribute, allows access to config dictionary values
@@ -416,9 +423,13 @@ class MultiGrid (object):
         grids: np.array or np.memmap
         """
         filename = config['filename']
+        
         if config['filename'] is None and config['data_model'] == 'memmap':
             # print "a"
             filename = os.path.join(mkdtemp(), 'temp.dat')
+            print(filename)
+            self.__temp__ = True
+            self.__temp_file__ = filename
         elif not config['filename'] is None and not os.path.exists(filename):
             # print "b", filename
             filename = os.path.split(filename)[1]

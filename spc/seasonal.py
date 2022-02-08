@@ -24,14 +24,19 @@ def load_monthly_data (
 
 
     if os.path.isfile(directory):
-        grid_names = [] 
-        start = 1901
-        end = 2015
-        for yr in range(int(start), int(end)+1): 
-            for mn in ['01','02','03','04','05','06','07','08','09','10','11','12']: 
-                grid_names.append(str(yr) + '-' + str(mn)) 
+        # grid_names = [] 
+        # start = 1901
+        # end = 2015
+        # for yr in range(int(start), int(end)+1): 
+        #     for mn in ['01','02','03','04','05','06','07','08','09','10','11','12']: 
+        #         grid_names.append(str(yr) + '-' + str(mn)) 
+
         monthly_data = temporal_grid.TemporalGrid(directory)
-        monthly_data.config['grid_name_map'] = monthly_data.create_name_map(grid_names)
+        key = list(monthly_data.config['grid_name_map'].keys())[0]
+        # print(key)
+        # year, month = 
+        start = [int(i) for i in key.split('-')][0]
+        # monthly_data.config['grid_name_map'] = monthly_data.create_name_map(grid_names)
     else:
 
         rasters =  sort_func(glob.glob(os.path.join(directory,'*.tif')))
@@ -192,8 +197,10 @@ def sum_element_by_date_range(monthly, start, end, row, col):
     float
         sum of seasonal precip 
     """
-
-    start = datetime.fromisoformat(str(start))
+    try:
+        start = datetime.fromisoformat(str(start))
+    except ValueError:
+        return np.nan
     end = datetime.fromisoformat(str(end))
     # print(range(start.year, end.year + 1),  range(start.month, end.month + 1))
 

@@ -296,13 +296,11 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
     np.array with shape (n_year, row, cols)
     """
     w_lock = Lock()
-    
     if num_process is None:
        num_process = cpu_count()
 
     grid_shape = monthly.config['grid_shape']
     n_years = dates.config['num_grids']//2
-
     shape = (n_years,grid_shape[0],grid_shape[1])
 
     if summed_data is None: ## create resulting data space if none exists
@@ -441,8 +439,6 @@ def root_mg_to_date_mg(roots, start_date, skip_at_start=0, skip_at_end=None):
         data_type = 'datetime64[D]', 
         start_timestep = 0,
         )
-
-        
 
     dates_mg.grids[:] =  np.datetime64(start_date - timedelta(days=1)) 
     dates_mg.grids[:] += abs(roots.grids).astype(np.timedelta64)[

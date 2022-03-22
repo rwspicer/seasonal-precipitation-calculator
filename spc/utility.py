@@ -8,7 +8,7 @@ raster files.
 """
 from multigrids.temporal_grid import TemporalGrid
 from multigrids import tools
-import CLILib 
+from spicebox import CLILib 
 
 
 import os, sys
@@ -72,28 +72,59 @@ def utility ():
         python spc/utility.py --monthly-data=./ --out-directory=./ 
             --season=winter --sort-method=snap
     """
+    flags = {
+            '--monthly-data': 
+                {'required': True, 'type': str}, 
+            '--out-directory': 
+                {'required': True, 'type': str},
+            "--sort-method": 
+                {'required': False, 'type': str, 'default': 'default', 
+                'accepted-values':['default','snap']},
+            "--season" : 
+                {'required': False, 'type': str, 
+                'accepted-values':list(SEASONS.keys())}, 
+            "--method": 
+                {
+                    'required': False, 
+                    'type': str, 
+                    'default':'monthly',
+                    'accepted-values': ['roots', 'monthly']
+                }, 
+            "--roots-file": 
+                {'required': False, 'type':str},
+            '--season-length': 
+                {'required': False, 'type': str},
+            '--out-format': 
+                {
+                    'required': False, 'default': 'tiff', 'type': str, 
+                    'accepted-values':['tiff','multigrid']
+                },
+        }
     try:
-        arguments = CLILib.CLI(
-            ['--monthly-data', '--out-directory'],
-            [
-            '--sort-method', '--season', '--method',
-            '--roots-directory', '--roots-file',
-            '--season-length', '--out-format', 
-            ]   
-        )
+    #     arguments = CLILib.CLI(
+    #         ['', ''],
+    #         [
+    #         '', '--season', '--method',
+    #         '--roots-directory', '--roots-file',
+    #         '--season-length', '--out-format', 
+    #         ]   
+    #     )
+        
+
+        arguments = CLILib.CLI(flags)
     except (CLILib.CLILibHelpRequestedError, CLILib.CLILibMandatoryError) as E:
         print (E)
         print(utility.__doc__)
         return
-
-    if arguments['--sort-method']is None:
+    # print(arguments)
+    # sys.exit(0)
+    if arguments['--sort-method'].lower() == "default":
         sort_method = "Using default python sort function"
         sort_fn = sorted
     elif  arguments['--sort-method'].lower() == 'snap':
         sort_method = "Using SNAP sort function"
         sort_fn = sort_snap_files
-    elif not arguments['--sort-method']is None and\
-        arguments['--sort-method'].lower() != "default":
+    else:
         print("invalid --sort-method option")
         print("run utility.py --help to see valid options")
         print("exiting")
@@ -156,7 +187,7 @@ def utility ():
 
         # try:
         monthly.config['start_timestep'] = 0
-        print(monthly.config['description'])
+        # print(monthly.config['description'])
         summed = seasonal.sum_seasonal_2(
             monthly, dates, season_length, season_name
         ) 

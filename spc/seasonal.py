@@ -5,63 +5,14 @@ Seasonal Precipitation Calculator
 
 
 """
-from multigrids.tools import load_and_create, get_raster_metadata, temporal_grid
-import glob, os
-import re
+from multigrids import temporal_grid
 import numpy as np
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 from multiprocessing import Process, Lock, active_children, cpu_count
 
-def load_monthly_data (
-        directory, dataset_name = 'Monthly Precipitation', sort_func = sorted,
-        no_data = -9999 
-    ):
-
-    if os.path.isfile(directory):
-        monthly_data = temporal_grid.TemporalGrid(directory)
-        key = list(monthly_data.config['grid_name_map'].keys())[0]
-        start = [int(i) for i in key.split('-')][0]
-    else:
-        rasters =  sort_func(glob.glob(os.path.join(directory,'*.tif')))
-
-        match = r'([1-3][0-9]{3})'
-        start = os.path.split(rasters[0])[-1]
-        start = re.search(match, start).group(0)   
-        end = os.path.split(rasters[-1])[-1]
-        end = re.search(match, end).group(0)   
-
-        grid_names = [] 
-        for yr in range(int(start), int(end)+1): 
-            for mn in ['01','02','03','04','05','06','07','08','09','10','11','12']: 
-                grid_names.append(str(yr) + '-' + str(mn)) 
-
-        load_params = {
-            "method": "tiff",
-            "directory": directory,
-            "sort_func": sort_func,
-        }
-        create_params = {
-            "name": dataset_name,
-            "grid_names": grid_names,
-        }
-
-        monthly_data = load_and_create(
-            load_params, create_params
-        )
-
-        ex_raster = rasters[0]
-
-        monthly_data.config['raster_metadata'] = get_raster_metadata(ex_raster)
-
-        ## precip is never less than zero TODO is this the cause of the weird issues?
-        monthly_data.grids[monthly_data.grids < 0] = np.nan
-
-    monthly_data.config['start_year'] = int(start)
-
-    return monthly_data
-
-def sum_precip(monthly, months, years='all', name="Summed-Precip"):
+def sum_seasonal_by_months(monthly, months, years='all', name="Summed-Precip"):
     """
 
     Parameters
@@ -126,9 +77,9 @@ def sum_precip(monthly, months, years='all', name="Summed-Precip"):
     precip_sum = None
     for mon in months_filtered:
         try:
-            precip_sum += monthly.get_grids_at_keys(months_filtered[mon])
+            precip_sum += monthly.get_grids(months_filtered[mon]) 
         except TypeError:
-            precip_sum = monthly.get_grids_at_keys(months_filtered[mon])
+            precip_sum = monthly.get_grids(months_filtered[mon])
 
     
     
@@ -157,13 +108,12 @@ def get_start_next_month(date):
     datetime.datetime
         date of the start of the next month
     """
-    if date.month+1 <= 12:
-        return datetime(date.year,date.month+1,1)  
-    return datetime(date.year+1,1,1) ## its next year
+    return date + relativedelta(months=1)
 
-def sum_element_by_date_range(monthly, start, end, row, col):
-    """sum a season based on start and end dates. Fractional protion of months
-    is calculated.
+def sum_element_for_date_range(monthly, start, end, row, col):
+    """sum a season based on start and end dates. Fractional portion of months
+    is calculated. Preforms operation only on pixel at row,col and for a single
+    date_range
 
     Parameters
     ----------
@@ -189,24 +139,20 @@ def sum_element_by_date_range(monthly, start, end, row, col):
     end = datetime.fromisoformat(str(end))
 
     keys = []
-    month = start.month
-    year = start.year
+
+    date = start
     while True:
-        keys.append('%i-%02i' % (year,month))
+        keys.append('%i-%02i' % (date.year,date.month))
 
-        if year == end.year and month == end.month:
+        if date.year == end.year and date.month == end.month:
             break
-
-        month += 1
-        if month == 13:
-            month = 1
-            year += 1
+        date = get_start_next_month(date)
 
 
-    data = monthly.get_grids_at_keys(keys)[:, row,col]
+    data = monthly.get_grids(keys)[:, row,col]
     if len(data) == 1:
-        ## do somthing else:
-        total_days = (
+        ## do somthing else: 
+        total_days = ( 
             get_start_next_month(end) - datetime(end.year,end.month,1)
         ).days
         days = (end.day + 1) - start.day
@@ -255,13 +201,12 @@ def process_pixel_warper(monthly, bounds, row, col, start_year, grids, lock ):
         start, end = bound_pair[0],bound_pair[1]
         if lock:
             lock.acquire()
-        grids[year, row, col] = sum_element_by_date_range(
+        grids[year, row, col] = sum_element_for_date_range(
             monthly, start, end, row, col
         )
         if lock:
             lock.release()
         year += 1
-
 
 def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1, 
         start_row=0, start_col =0, end_row = None,
@@ -363,8 +308,8 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
 
     return grids
 
-def sum_seasonal_2(monthly, dates, n_days=None, season='winter', start_year=0, 
-        name="Summed-Precip"
+def sum_seasonal_by_roots(monthly, dates, n_days=None, season='winter', 
+        start_year=0, name="Summed-Precip-by-roots"
     ):
     """calculates seasonal precip based on freezing/thawing dates
 
@@ -376,7 +321,7 @@ def sum_seasonal_2(monthly, dates, n_days=None, season='winter', start_year=0,
         dates grid with alternating freezing then thawing dates
     n_days: int or string, optional
         override for season length, if this is used the end date for 
-        the seasion is the thawing data my n_days from freezing date
+        the season is the thawing data my n_days from freezing date
 
         if a string 'summer' or 'winter' should be provided to calculate the
         season from the roots for the respective season 

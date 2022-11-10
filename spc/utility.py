@@ -12,20 +12,16 @@ from spicebox import CLILib
 
 
 import os, sys
-import numpy as np
+# import numpy as np
 
 import seasonal 
+import subutilities
 
 from sort import sort_snap_files
 
 from datetime import datetime
 
-SEASONS = {
-    "winter": [10, 11, 12, 13, 14, 15],
-    "early-winter": [10, 11],
-    "summer": [4, 5, 6, 7, 8, 9],
-    "late-summer": [8, 9],
-}
+
 
 
 def utility ():
@@ -51,11 +47,8 @@ def utility ():
             'early winter' for Oct - Nov
             summer for Apr - Sept
 
-        --roots-directory:
-            directory containing roots data in tiff format in files that
-            can be sorted correctly using pythons sorted methdod
-        --roots-file:
-            roots file multigird
+        --roots:
+            roots file multigird, or directort of roots tiff files
         --season-length: int
             length in days of season to use with roots.  
         --out-format:
@@ -82,7 +75,7 @@ def utility ():
                 'accepted-values':['default','snap']},
             "--season" : 
                 {'required': False, 'type': str, 
-                'accepted-values':list(SEASONS.keys())}, 
+                'accepted-values':list(subutilities.SEASONS.keys())}, 
             "--method": 
                 {
                     'required': False, 
@@ -90,7 +83,7 @@ def utility ():
                     'default':'monthly',
                     'accepted-values': ['roots', 'monthly']
                 }, 
-            "--roots-file": 
+            "--roots": 
                 {'required': False, 'type':str},
             '--season-length': 
                 {'required': False, 'type': str},
@@ -99,109 +92,64 @@ def utility ():
                     'required': False, 'default': 'tiff', 'type': str, 
                     'accepted-values':['tiff','multigrid']
                 },
+            '--verbose': 
+                {
+                    'required': False, 'type': str, 'default': '', 
+                    'accepted-values': ['', 'log', 'warn']
+                },
+            '--save-temp-monthly':
+                {'required': False, 'type': bool, 'default': False },
         }
     try:
-    #     arguments = CLILib.CLI(
-    #         ['', ''],
-    #         [
-    #         '', '--season', '--method',
-    #         '--roots-directory', '--roots-file',
-    #         '--season-length', '--out-format', 
-    #         ]   
-    #     )
-        
-
         arguments = CLILib.CLI(flags)
     except (CLILib.CLILibHelpRequestedError, CLILib.CLILibMandatoryError) as E:
         print (E)
         print(utility.__doc__)
         return
-    # print(arguments)
-    # sys.exit(0)
-    if arguments['--sort-method'].lower() == "default":
-        sort_method = "Using default python sort function"
-        sort_fn = sorted
-    elif  arguments['--sort-method'].lower() == 'snap':
-        sort_method = "Using SNAP sort function"
-        sort_fn = sort_snap_files
-    else:
-        print("invalid --sort-method option")
-        print("run utility.py --help to see valid options")
-        print("exiting")
-        return
 
-    monthly = seasonal.load_monthly_data(
-        arguments['--monthly-data'], sort_func=sort_fn
+    verbose = arguments['--verbose'] != ''
+
+    
+
+    sort_fn = subutilities.get_sort_method(arguments, verbose)
+    if sort_fn is None:
+        print('exiting')
+        return 
+
+    if arguments['--save-temp-monthly']:
+        save_temp = True
+
+
+    if verbose:
+        print('Loading Monthly data ...')
+    monthly = subutilities.load_monthly_data(
+        arguments['--monthly-data'], 
+        sort_func=sort_fn, save_temp = save_temp, verbose=verbose
     )
 
-    if arguments['--method'] is None or arguments['--method'] == 'monthly':
-        season = arguments['--season']
-        name = season + '-precipitation'
-        summed = seasonal.sum_precip(monthly, SEASONS[season], name=name)
 
-        summed.config['description'] = name + " for months " +\
-            str(SEASONS[season]) +\
-            "(month '13' is january for the next year, '14' is feb, etc)"
-        summed.config['raster_metadata'] = monthly.config['raster_metadata']
+    ## sum data
+    if arguments['--method'] is None or arguments['--method'] == 'monthly':
+        if verbose:
+            print('Using Monthly Sums method')
+        summed = subutilities.method_monthly(arguments, monthly, verbose)
+
     elif arguments['--method'] == 'roots':
 
         if arguments['--roots-file']:
-            print(' roots file')
-            roots = TemporalGrid(arguments['--roots-file'])
-        elif arguments['--roots-directory']:
-            load_params = {
-            "method": "tiff",
-            "directory": arguments['--roots-directory'],
-            "sort_func": sorted
-            }
-            create_params = {
-                "name": 'roots',
-                "start_timestep": 0,
-            }
-
-            roots = tools.load_and_create(
-                load_params, create_params
+            roots = subutilities.load_roots_data(
+                arguments['--roots-file'], 
+                sort_func=sort_fn, save_temp = save_temp, verbose=verbose
             )
         else:
-            print ("'--roots-file' or '--roots-directory' must be"
-                   " suppied for 'roots' method"
+            print ("'--roots' must be supplied for 'roots' method"
             )
-
-        key = list(monthly.config['grid_name_map'].keys())[0]
-        # print(key)
-        year, month = [int(i) for i in key.split('-')]
-        start_date = datetime(year, month, 1)
-        # print(start_date)
-
-        try:
-            season_name, season_length = arguments['--season-length'].split('-')
-        except ValueError:
-            season_name = arguments['--season-length']
-            season_length = None
-
-        if season_name == 'summer':
-            dates = seasonal.root_mg_to_date_mg(roots, start_date) # don't need to skip ends
-        elif  season_name == 'winter':
-            dates = seasonal.root_mg_to_date_mg(roots, start_date, 1, 1)
-        # print(dates)
-
-        # try:
-        monthly.config['start_timestep'] = 0
-        # print(monthly.config['description'])
-        summed = seasonal.sum_seasonal_2(
-            monthly, dates, season_length, season_name
-        ) 
-        # except IndexError as e:
-        #     print (e)
-        #     sys.exit()
-
-        summed.config['start_timestep'] = year
-        summed.config['raster_metadata'] = monthly.config['raster_metadata']
-
-        # import matplotlib.pyplot as plt
-        # plt.imshow(summed[1950])
-        # plt.colorbar()
-        # plt.show()
+            print('exiting')
+            return
+        if verbose:
+            print('Using Sum Between roots method')
+        summed = subutilities.method_roots(arguments, monthly, roots, verbose)
+        
 
     else:
         print ("'--method' invalid -> %s" % str(arguments['--method']))
@@ -224,6 +172,7 @@ def utility ():
                 'seasonal-precip.yml'
             )
         )
+    
     
 
 

@@ -46,6 +46,14 @@ def get_sort_method(arguments, verbose=False):
 
     return  sort_fn
 
+def get_save_temp_status(test_val):
+    if test_val.lower() in ['false', 'f']:
+        save_temp = False
+    elif test_val.lower() in ['true', 't']:
+        save_temp = True
+    else: # a path
+        save_temp = test_val
+    return save_temp
 
 def load_monthly_data (
         directory, dataset_name = 'Monthly Precipitation', sort_func = sorted,
@@ -54,6 +62,7 @@ def load_monthly_data (
     """Loads monthy data directly from an existing TemporalGrid or by loading
     tiff files to a TemporalGrid
     """
+    
 
     if os.path.isfile(directory):
         if verbose:
@@ -95,8 +104,14 @@ def load_monthly_data (
             "verbose": verbose,
         }
 
+        if type(save_temp) is bool:
+            if save_temp:
+                save_temp = 'spc-temp-monthly-data.grids.yml'
+            else:
+                save_temp = None
+
         if not save_temp is None:
-            create_params['save_to'] = 'spc-temp-monthly-data.yml'
+            create_params['save_to'] = save_temp
             create_params['name'] = \
                 'Seasonal Precip Calculator Temp Monthly Data'
 
@@ -128,12 +143,23 @@ def load_roots_data(
         load_params = {
         "method": "mp_tiff",
         "directory": directory,
-        "sort_func": sorted
+        "sort_func": sort_func
         }
         create_params = {
-            "name": 'roots',
+            "name": dataset_name,
             "start_timestep": 0,
         }
+
+        if type(save_temp) is bool:
+            if save_temp:
+                save_temp = 'spc-temp-roots-data.grids.yml'
+            else:
+                save_temp = None
+
+        if not save_temp is None:
+            create_params['save_to'] = save_temp
+            create_params['name'] = \
+                'Seasonal Precip Calculator Temp roots data'
 
         roots = load_and_create(
             load_params, create_params

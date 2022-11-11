@@ -98,7 +98,9 @@ def utility ():
                     'accepted-values': ['', 'log', 'warn']
                 },
             '--save-temp-monthly':
-                {'required': False, 'type': bool, 'default': False },
+                {'required': False, 'type': str, 'default': 'False' },
+            '--save-temp-roots':
+                {'required': False, 'type': str, 'default': 'False' },
         }
     try:
         arguments = CLILib.CLI(flags)
@@ -116,8 +118,12 @@ def utility ():
         print('exiting')
         return 
 
-    if arguments['--save-temp-monthly']:
-        save_temp = True
+
+    
+    save_temp = subutilities.get_save_temp_status(
+        arguments['--save-temp-monthly']
+    )
+
 
 
     if verbose:
@@ -136,7 +142,11 @@ def utility ():
 
     elif arguments['--method'] == 'roots':
 
+
         if arguments['--roots-file']:
+            save_temp = subutilities.get_save_temp_status(
+                arguments['--save-temp-roots']
+            )
             roots = subutilities.load_roots_data(
                 arguments['--roots-file'], 
                 sort_func=sort_fn, save_temp = save_temp, verbose=verbose
@@ -146,6 +156,8 @@ def utility ():
             )
             print('exiting')
             return
+
+
         if verbose:
             print('Using Sum Between roots method')
         summed = subutilities.method_roots(arguments, monthly, roots, verbose)

@@ -38,7 +38,8 @@ def utility ():
         --method: string
             monthly, or roots
             if monthly, --season must be used also
-            if roots,  --roots-directory or  --roots-file must be used also
+            if roots,  --roots must be used to specify the directory or 
+                multigrd file that contains the roots also
                 --season-length may also be used with roots method
         --season: string
             Season to sum precipitation for. Seasons are defined below 
@@ -133,22 +134,72 @@ def utility ():
         sort_func=sort_fn, save_temp = save_temp, verbose=verbose
     )
 
+    
+
+    try:
+        os.makedirs(arguments['--out-directory'])
+    except:
+        pass
+    # if arguments['--out-format'] is None or \
+    #         arguments['--out-format'] == 'tiff' :
+    #     ## do this later
+    #     # summed.save_all_as_geotiff(arguments['--out-directory'])
+    #     pass
+    # elif arguments['--out-format'] == 'multigrid':
+    #     summed.config['command-used-to-create'] = ' '.join(sys.argv)
+    #     summed.save(
+    #         os.path.join(
+    #             arguments['--out-directory'], 
+    #             'seasonal-precip.yml'
+    #         )
+    #     )
+
+    grid_shape = monthly.config['grid_shape']
+    n_years = monthly.config['num_grids']//12
+
+    
+    outpath=None
+    if arguments['--out-format'] == 'multigrid':
+        outpath = os.path.join(
+            arguments['--out-directory'], 
+            'seasonal-precip.yml'
+        )
+
+    summed = TemporalGrid(
+        grid_shape[0], # rows
+        grid_shape[1], # cols
+        n_years, # years
+        data_type = monthly.grids.dtype, 
+        dataset_name = 'sum-precip-temp-ds-name',
+        description = "seasonal precip summed by ?",
+        mask = monthly.config['mask'],
+        # initial_data = precip_sum,
+        start_timestep = 0,
+        save_to=outpath
+    )
+
+    
 
     ## sum data
     if arguments['--method'] is None or arguments['--method'] == 'monthly':
         if verbose:
             print('Using Monthly Sums method')
-        summed = subutilities.method_monthly(arguments, monthly, verbose)
+        summed = subutilities.method_monthly(
+            arguments, monthly, summed, verbose
+        ) # TODO use SUMMED ARG IN THIS FUNC
 
     elif arguments['--method'] == 'roots':
 
 
-        if arguments['--roots-file']:
-            save_temp = subutilities.get_save_temp_status(
-                arguments['--save-temp-roots']
-            )
+        if arguments['--roots']:
+            if os.path.isdir(arguments['--roots']):
+                save_temp = subutilities.get_save_temp_status(
+                    arguments['--save-temp-roots']
+                )
+            else:
+                save_temp=None
             roots = subutilities.load_roots_data(
-                arguments['--roots-file'], 
+                arguments['--roots'], 
                 sort_func=sort_fn, save_temp = save_temp, verbose=verbose
             )
         else:
@@ -160,7 +211,9 @@ def utility ():
 
         if verbose:
             print('Using Sum Between roots method')
-        summed = subutilities.method_roots(arguments, monthly, roots, verbose)
+        summed = subutilities.method_roots(
+            arguments, monthly, summed, roots, verbose
+        )
         
 
     else:
@@ -169,10 +222,10 @@ def utility ():
 
 
 
-    try:
-        os.makedirs(arguments['--out-directory'])
-    except:
-        pass
+    # try:
+    #     os.makedirs(arguments['--out-directory'])
+    # except:
+    #     pass
     if arguments['--out-format'] is None or \
             arguments['--out-format'] == 'tiff' :
         summed.save_all_as_geotiff(arguments['--out-directory'])

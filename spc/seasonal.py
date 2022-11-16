@@ -148,8 +148,9 @@ def sum_element_for_date_range(monthly, start, end, row, col):
             break
         date = get_start_next_month(date)
 
-
-    data = monthly.get_grids(keys)[:, row,col]
+    # print(keys, row, col)
+    data = monthly[keys, row,col]
+    # print('data', len(data), data)
     if len(data) == 1:
         ## do somthing else: 
         total_days = ( 
@@ -176,7 +177,7 @@ def sum_element_for_date_range(monthly, start, end, row, col):
     return data.sum()
 
 
-def process_pixel_warper(monthly, bounds, row, col, start_year, grids, lock ):
+def process_pixel_warper(monthly, bounds, row, col, start_year, seasonal, lock ):
     """multiprocessing wrapper to process a single year for a single pixel
 
     Parameters
@@ -198,19 +199,24 @@ def process_pixel_warper(monthly, bounds, row, col, start_year, grids, lock ):
     year = start_year
 
     for bound_pair in bounds:
+        # print(bound_pair)
         start, end = bound_pair[0],bound_pair[1]
         if lock:
             lock.acquire()
-        grids[year, row, col] = sum_element_for_date_range(
+        sum = sum_element_for_date_range(
             monthly, start, end, row, col
         )
+        # print(sum)
+        seasonal.grids[year].reshape(
+            seasonal.config['grid_shape']
+        )[row,col] = sum
         if lock:
             lock.release()
         year += 1
 
 def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1, 
         start_row=0, start_col =0, end_row = None,
-        summed_data = None
+        summed_data = None, verbose=True
     ):
     """
     calculates seasonal precip based on date ranges
@@ -248,56 +254,102 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
     n_years = dates.config['num_grids']//2
     shape = (n_years,grid_shape[0],grid_shape[1])
 
-    if summed_data is None: ## create resulting data space if none exists
-        filename = 'calc_precip_temp.data'
-        grids = np.memmap(filename, dtype='float32', mode='w+', shape=shape) 
-        grids += np.nan
-    else:
-        try:
-            grids = summed_data.grids
-        except AttributeError:
-            grids = summed_data
+    # if summed_data is None: ## create resulting data space if none exists
+    #     filename = 'calc_precip_temp.data'
+    #     grids = np.memmap(filename, dtype='float32', mode='w+', shape=shape) 
+    #     grids += np.nan
+    # else:
+    #     try:
+    #         grids = summed_data.grids
+    #     except AttributeError:
+    #         grids = summed_data
+
+
+    # print(grids.filename)
     
     real_shape = dates.config['real_shape']
     bounds_shape = (dates.config['num_timesteps']//2,2)
     disp_bounds = True
     
-    if end_row is None:
-        rows = range(start_row, grid_shape[0])
-        end_row = grid_shape[0]
-    else:
-        rows = range(start_row, end_row)
+    # if end_row is None:
+    #     rows = range(start_row, grid_shape[0])
+    #     end_row = grid_shape[0]
+    # else:
+    #     rows = range(start_row, end_row)
 
-    for row in rows:
-        print (row, '/', grid_shape[0], ':', row/(end_row-start_row)*100 )
-        for col in range(start_col, grid_shape[1]):
-            if np.isnan(monthly[0][row,col]):
-                continue
-            
-            bounds = dates.grids.reshape(real_shape)[:,row,col]\
-                .reshape(bounds_shape)
-            if n_days:
-                bounds[:,1] = bounds[:,0] + np.timedelta64(n_days,'D')
-            if disp_bounds:
-                print(bounds)
-                disp_bounds=False
+    print('Calculating valid indices!')
 
-            year_idx = 0
+    # indices = range(start, temp_grid.shape[1])
+    init = monthly[monthly.config['start_timestep']].flatten()
+    indices = ~np.isnan(init)
+    recalc_mask = None # TODO impement
+    if not recalc_mask is None:
+        mask = recalc_mask.flatten()
+        indices = np.logical_and(indices, mask)
 
-            if num_process > 1: 
-                while len(active_children()) >= num_process:
-                    continue
-                # (monthly, bounds, row, col, start_year, grids, lock ) <- args
-                Process(target=process_pixel_warper,
-                        name = "Calc precip for all years in r:%i, c:%i" % (row, col),
-                        args=(
-                            monthly, bounds, row, col, year_idx, grids, w_lock
-                        )
-                    ).start()
-            else: ## no multiprocessing
-                process_pixel_warper(
-                    monthly, bounds, row, col, year_idx, grids, None
+    indices = np.where(indices)[0]
+    shape=monthly.config['grid_shape']
+    n_cells = shape[0] * shape[1]
+    start = 0 # todo implment
+    indices = indices[indices > start]
+    import gc
+    print("Starting, with %i processes" % num_process)
+    for idx in indices: # flatted area grid index
+        row, col = np.unravel_index(idx, shape)
+        while len(active_children()) >= num_process:
+            continue
+        [gc.collect(i) for i in range(3)] 
+        print(
+            'calculating for element ' + str(idx) + \
+            '. ~' + '%.2f' % ((idx/n_cells) * 100) + '% complete.'
+        )
+        # index = row, col
+        bounds = dates.grids.reshape(real_shape)[:,row,col]\
+            .reshape(bounds_shape)
+        year_idx = 0
+        if num_process == 1:
+            process_pixel_warper(
+                monthly, bounds, row, col, year_idx, summed_data, None
+            )
+        else:
+            Process(target=process_pixel_warper,
+                name = "Calc precip for all years in r:%i, c:%i" % (row, col),
+                args=(
+                    monthly, bounds, row, col, year_idx, summed_data, w_lock
                 )
+            ).start()
+
+    # for row in rows:
+    #     if verbose:
+    #         print (row, '/', grid_shape[0], ':', row/(end_row-start_row)*100 )
+    #     for col in range(start_col, grid_shape[1]):
+    #         if np.isnan(monthly[0][row,col]):
+    #             continue
+    #         print(col)
+    #         bounds = dates.grids.reshape(real_shape)[:,row,col]\
+    #             .reshape(bounds_shape)
+    #         if n_days:
+    #             bounds[:,1] = bounds[:,0] + np.timedelta64(n_days,'D')
+    #         if disp_bounds:
+    #             print(bounds)
+    #             disp_bounds=False
+
+    #         year_idx = 0
+
+    #         if num_process > 1: 
+    #             while len(active_children()) >= num_process:
+    #                 continue
+    #             # (monthly, bounds, row, col, start_year, grids, lock ) <- args
+    #             Process(target=process_pixel_warper,
+    #                     name = "Calc precip for all years in r:%i, c:%i" % (row, col),
+    #                     args=(
+    #                         monthly, bounds, row, col, year_idx, grids, w_lock
+    #                     )
+    #                 ).start()
+    #         else: ## no multiprocessing
+    #             process_pixel_warper(
+    #                 monthly, bounds, row, col, year_idx, grids, None
+    #             )
 
     if num_process > 1:
         print('Waiting on final processes to complete')
@@ -308,9 +360,7 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
 
     return grids
 
-def sum_seasonal_by_roots(monthly, dates, n_days=None, season='winter', 
-        start_year=0, name="Summed-Precip-by-roots"
-    ):
+def sum_seasonal_by_roots(monthly, dates, summed_data=None, n_days=None, verbose=False):
     """calculates seasonal precip based on freezing/thawing dates
 
     parameters
@@ -336,21 +386,41 @@ def sum_seasonal_by_roots(monthly, dates, n_days=None, season='winter',
         the seasonal precip
 
     """
-    precip_sum = sum_grids_by_ranges(monthly, dates, n_days, num_process=8) 
+    # grid_shape = monthly.config['grid_shape']
+    # n_years = dates.config['num_grids']//2
 
-    precip_sum = temporal_grid.TemporalGrid(
-        precip_sum.shape[1], # rows
-        precip_sum.shape[2], # cols
-        precip_sum.shape[0], # years
-        data_type = precip_sum.dtype, 
-        dataset_name = name,
-        description = "seasonal precip summed by date ranges",
-        mask = monthly.config['mask'],
-        initial_data = precip_sum,
-        start_timestep = start_year,
-        )
+    # precip_sum = temporal_grid.TemporalGrid(
+    #     grid_shape[0], # rows
+    #     grid_shape[1], # cols
+    #     n_years, # years
+    #     data_type = precip_sum.dtype, 
+    #     dataset_name = name,
+    #     description = "seasonal precip summed by date ranges",
+    #     mask = monthly.config['mask'],
+    #     # initial_data = precip_sum,
+    #     start_timestep = start_year,
+    #     save_to=
+    # )
 
-    return precip_sum
+
+    sum_grids_by_ranges(
+        monthly, dates, n_days, num_process=None,
+        summed_data=summed_data, verbose=verbose
+    ) 
+
+    # precip_sum = temporal_grid.TemporalGrid(
+    #     precip_sum.shape[1], # rows
+    #     precip_sum.shape[2], # cols
+    #     precip_sum.shape[0], # years
+    #     data_type = precip_sum.dtype, 
+    #     dataset_name = name,
+    #     description = "seasonal precip summed by date ranges",
+    #     mask = monthly.config['mask'],
+    #     initial_data = precip_sum,
+    #     start_timestep = start_year,
+    # )
+
+    return summed_data
 
 
 def root_mg_to_date_mg(roots, start_date, skip_at_start=0, skip_at_end=None):
@@ -376,19 +446,30 @@ def root_mg_to_date_mg(roots, start_date, skip_at_start=0, skip_at_end=None):
     """
 
     skip = skip_at_start + skip_at_end if skip_at_end else 0
-
-    dates_mg = temporal_grid.TemporalGrid(
-        roots.config['grid_shape'][0], # rows
-        roots.config['grid_shape'][1], # cols
-        roots.config['num_timesteps'] - skip, # years
-        data_type = 'datetime64[D]', 
-        start_timestep = 0,
+    import os
+    if os.path.isfile('temp-dates-grid.yml'):
+        dates_mg = temporal_grid.TemporalGrid('temp-dates-grid.yml')
+        return dates_mg
+    else:
+        dates_mg = temporal_grid.TemporalGrid(
+            roots.config['grid_shape'][0], # rows
+            roots.config['grid_shape'][1], # cols
+            roots.config['num_timesteps'] - skip, # years
+            data_type = 'datetime64[D]', 
+            start_timestep = 0,
+            save_to='temp-dates-grid.yml'
         )
-
-    dates_mg.grids[:] =  np.datetime64(start_date - timedelta(days=1)) 
-    dates_mg.grids[:] += abs(roots.grids).astype(np.timedelta64)[
-        skip_at_start:( -1 * skip_at_end) if skip_at_end else None
-    ] 
+    
+    # skip_at_start:( -1 * skip_at_end) if skip_at_end else None
+    for row in range(dates_mg.grids.shape[0]):
+        print('dates_row: %s, roots row: %s, sas: %s' % (
+            row, row+skip_at_start, skip_at_start
+            )
+        )
+        dates_mg.grids[row] =  np.datetime64(start_date - timedelta(days=1)) 
+        dates_mg.grids[row] += \
+            abs(roots.grids[row + skip_at_start]).astype(np.timedelta64)
+        print( dates_mg.grids[row][ ~np.isnan( roots.grids[0] ) ][:5] )
     return dates_mg
 
 

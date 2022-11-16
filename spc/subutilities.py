@@ -69,7 +69,7 @@ def load_monthly_data (
             print('Loading File: %s'% directory)
         monthly_data = temporal_grid.TemporalGrid(directory)
         key = list(monthly_data.config['grid_name_map'].keys())[0]
-        start = [int(i) for i in key.split('-')][0]
+        start = key.year
     else:
         if verbose:
             print('Reading tiffs from directory: %s'% directory)
@@ -101,7 +101,7 @@ def load_monthly_data (
             "grid_names": grid_names,
             "delta_timestep": relativedelta(months=1),
             "start_timestep": datetime(int(start),1,1),
-            "verbose": verbose,
+            # "verbose": verbose,
         }
 
         if type(save_temp) is bool:
@@ -122,8 +122,12 @@ def load_monthly_data (
         ex_raster = rasters[0]
 
         monthly_data.config['raster_metadata'] = get_raster_metadata(ex_raster)
-
-        monthly_data.grids[monthly_data.grids < 0] = np.nan
+        idx = monthly_data.grids[0] < 0
+        for gn in range(monthly_data.grids.shape[0]):
+            if verbose:
+                print("correcting data for timestep: % 05d" % gn)
+            monthly_data.grids[gn][idx] = np.nan
+        # monthly_data.grids[monthly_data.grids < 0] = np.nan
 
     monthly_data.config['start_year'] = int(start)
 
@@ -167,7 +171,7 @@ def load_roots_data(
 
     return roots
 
-def method_monthly(arguments, monthly,  verbose = False):
+def method_monthly(arguments, monthly, summed, verbose = False):
     """
     """
 
@@ -187,11 +191,11 @@ def method_monthly(arguments, monthly,  verbose = False):
     summed.config['raster_metadata'] = monthly.config['raster_metadata']
     return summed
 
-def method_roots(arguments, monthly, roots,  verbose = False):
+def method_roots(arguments, monthly, summed, roots,  verbose = False):
     """
     """
     key = list(monthly.config['grid_name_map'].keys())[0]
-    year, month = [int(i) for i in key.split('-')]
+    year, month = key.year, key.month
     start_date = datetime(year, month, 1)
 
     try:
@@ -200,6 +204,12 @@ def method_roots(arguments, monthly, roots,  verbose = False):
         season_name = arguments['--season-length']
         season_length = None
 
+    sld = season_length if not season_length is None else 'all'
+    summed.config['dataset_name'] = \
+        'Seasonal precip for %s using roots and %s days.' % (season_name, sld)
+    # TODO improve description
+    summed.config['description'] = \
+        'Seasonal precip for %s using roots and %s days.' % (season_name, sld) 
     if verbose:
         if season_length is None:
             print(
@@ -215,13 +225,13 @@ def method_roots(arguments, monthly, roots,  verbose = False):
         dates = seasonal.root_mg_to_date_mg(roots, start_date) # don't need to skip ends
     elif  season_name == 'winter':
         dates = seasonal.root_mg_to_date_mg(roots, start_date, 1, 1)
-    print(dates)
+    
 
     # try:
     monthly.config['start_timestep'] = 0
     # print(monthly.config['description'])
     summed = seasonal.sum_seasonal_by_roots(
-        monthly, dates, season_length, season_name
+        monthly, dates, summed, season_length, verbose=verbose
     ) 
     # except IndexError as e:
     #     print (e)

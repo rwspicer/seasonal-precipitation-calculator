@@ -9,6 +9,7 @@ raster files.
 from multigrids.temporal_grid import TemporalGrid
 from multigrids import tools
 from spicebox import CLILib 
+import numpy as np
 
 
 import os, sys
@@ -102,6 +103,9 @@ def utility ():
                 {'required': False, 'type': str, 'default': 'False' },
             '--save-temp-roots':
                 {'required': False, 'type': str, 'default': 'False' },
+            '--start-at':
+                {'required': False, 'type': int, 'default': 0 },
+
         }
     try:
         arguments = CLILib.CLI(flags)
@@ -165,6 +169,7 @@ def utility ():
             'seasonal-precip.yml'
         )
 
+    ## TODO LOAD ON RE LAUNCH
     summed = TemporalGrid(
         grid_shape[0], # rows
         grid_shape[1], # cols
@@ -177,6 +182,10 @@ def utility ():
         start_timestep = 0,
         save_to=outpath
     )
+
+    # ## TODO LOAD ON RE LAUNCH
+    # for row in range(summed.grids.shape[0]):
+    #     summed.grids[row][:] = np.nan
 
     
 

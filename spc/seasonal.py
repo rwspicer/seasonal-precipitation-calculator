@@ -110,6 +110,7 @@ def get_start_next_month(date):
     """
     return date + relativedelta(months=1)
 
+
 def sum_element_for_date_range(monthly, start, end, row, col):
     """sum a season based on start and end dates. Fractional portion of months
     is calculated. Preforms operation only on pixel at row,col and for a single
@@ -132,11 +133,14 @@ def sum_element_for_date_range(monthly, start, end, row, col):
     float
         sum of seasonal precip 
     """
-    try:
-        start = datetime.fromisoformat(str(start))
-    except ValueError:
+    # try:
+    start = start.astype(object)
+    # except ValueError:
+    if start is None:
         return np.nan
-    end = datetime.fromisoformat(str(end))
+    start = datetime(start.year, start.month, start.day)
+    end = end.astype(object)
+    end = datetime(end.year, end.month, end.day)
 
     keys = []
 
@@ -149,8 +153,14 @@ def sum_element_for_date_range(monthly, start, end, row, col):
         date = get_start_next_month(date)
 
     # print(keys, row, col)
-    data = monthly[keys, row,col]
-    # print('data', len(data), data)
+    # data = monthly[keys, row,col]
+    loc = np.ravel_multi_index([row,col] ,monthly.config['grid_shape'])
+    # print(loc)
+    gn = monthly.lookup_grid_numbers(keys)
+    data = monthly.grids[gn[0]:gn[-1]+1, loc]
+    # print(monthly.lookup_grid_numbers(keys), keys)
+    
+    # print('data', len(data), data, type(data))
     if len(data) == 1:
         ## do somthing else: 
         total_days = ( 
@@ -201,12 +211,14 @@ def process_pixel_warper(monthly, bounds, row, col, start_year, seasonal, lock )
     for bound_pair in bounds:
         # print(bound_pair)
         start, end = bound_pair[0],bound_pair[1]
-        if lock:
-            lock.acquire()
+        
         sum = sum_element_for_date_range(
             monthly, start, end, row, col
         )
-        # print(sum)
+        # print(row, col, bound_pair, sum)
+        
+        if lock:
+            lock.acquire()
         seasonal.grids[year].reshape(
             seasonal.config['grid_shape']
         )[row,col] = sum
@@ -216,7 +228,7 @@ def process_pixel_warper(monthly, bounds, row, col, start_year, seasonal, lock )
 
 def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1, 
         start_row=0, start_col =0, end_row = None,
-        summed_data = None, verbose=True
+        summed_data = None, verbose=True, start = 0
     ):
     """
     calculates seasonal precip based on date ranges
@@ -290,7 +302,7 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
     indices = np.where(indices)[0]
     shape=monthly.config['grid_shape']
     n_cells = shape[0] * shape[1]
-    start = 0 # todo implment
+    # start = 0 # todo implment
     indices = indices[indices > start]
     import gc
     print("Starting, with %i processes" % num_process)
@@ -358,9 +370,12 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
             continue
         print('Done')
 
-    return grids
+    return summed_data
 
-def sum_seasonal_by_roots(monthly, dates, summed_data=None, n_days=None, verbose=False):
+def sum_seasonal_by_roots(
+        monthly, dates, summed_data=None, 
+        n_days=None, verbose=False, start_at = 0
+    ):
     """calculates seasonal precip based on freezing/thawing dates
 
     parameters
@@ -405,7 +420,8 @@ def sum_seasonal_by_roots(monthly, dates, summed_data=None, n_days=None, verbose
 
     sum_grids_by_ranges(
         monthly, dates, n_days, num_process=None,
-        summed_data=summed_data, verbose=verbose
+        summed_data=summed_data, verbose=verbose,
+        start = start_at
     ) 
 
     # precip_sum = temporal_grid.TemporalGrid(

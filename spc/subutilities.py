@@ -106,7 +106,7 @@ def load_monthly_data (
 
         if type(save_temp) is bool:
             if save_temp:
-                save_temp = 'spc-temp-monthly-data.grids.yml'
+                save_temp = 'spc-temp-monthly-data.yml'
             else:
                 save_temp = None
 
@@ -125,7 +125,7 @@ def load_monthly_data (
         idx = monthly_data.grids[0] < 0
         for gn in range(monthly_data.grids.shape[0]):
             if verbose:
-                print("correcting data for timestep: % 05d" % gn)
+                print("Fixing data less than 0 data for timestep: % 05d" % gn)
             monthly_data.grids[gn][idx] = np.nan
         # monthly_data.grids[monthly_data.grids < 0] = np.nan
 
@@ -156,7 +156,7 @@ def load_roots_data(
 
         if type(save_temp) is bool:
             if save_temp:
-                save_temp = 'spc-temp-roots-data.grids.yml'
+                save_temp = 'spc-temp-roots-data.yml'
             else:
                 save_temp = None
 
@@ -231,7 +231,8 @@ def method_roots(arguments, monthly, summed, roots,  verbose = False):
     monthly.config['start_timestep'] = 0
     # print(monthly.config['description'])
     summed = seasonal.sum_seasonal_by_roots(
-        monthly, dates, summed, season_length, verbose=verbose
+        monthly, dates, summed, season_length, 
+        verbose=verbose, start_at=arguments['--start-at']
     ) 
     # except IndexError as e:
     #     print (e)

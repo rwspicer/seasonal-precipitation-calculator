@@ -170,22 +170,25 @@ def utility ():
         )
 
     ## TODO LOAD ON RE LAUNCH
-    summed = TemporalGrid(
-        grid_shape[0], # rows
-        grid_shape[1], # cols
-        n_years, # years
-        data_type = monthly.grids.dtype, 
-        dataset_name = 'sum-precip-temp-ds-name',
-        description = "seasonal precip summed by ?",
-        mask = monthly.config['mask'],
-        # initial_data = precip_sum,
-        start_timestep = 0,
-        save_to=outpath
-    )
 
-    # ## TODO LOAD ON RE LAUNCH
-    # for row in range(summed.grids.shape[0]):
-    #     summed.grids[row][:] = np.nan
+    if outpath and os.path.exists(outpath):
+        summed = TemporalGrid(outpath)
+    
+    else:
+        summed = TemporalGrid(
+            grid_shape[0], # rows
+            grid_shape[1], # cols
+            n_years, # years
+            data_type = monthly.grids.dtype, 
+            dataset_name = 'sum-precip-temp-ds-name',
+            description = "seasonal precip summed by ?",
+            mask = monthly.config['mask'],
+            # initial_data = precip_sum,
+            start_timestep = 0,
+            save_to=outpath
+        )
+        for row in range(summed.grids.shape[0]):
+            summed.grids[row][:] = np.nan
 
     
 
@@ -196,7 +199,7 @@ def utility ():
         summed = subutilities.method_monthly(
             arguments, monthly, summed, verbose
         ) # TODO use SUMMED ARG IN THIS FUNC
-
+        summed.config['description'] = "seasonal precipitation summed by months"
     elif arguments['--method'] == 'roots':
 
 
@@ -211,6 +214,8 @@ def utility ():
                 arguments['--roots'], 
                 sort_func=sort_fn, save_temp = save_temp, verbose=verbose
             )
+            summed.config['description'] = \
+                "seasonal precipitation summed from root to root"
         else:
             print ("'--roots' must be supplied for 'roots' method"
             )

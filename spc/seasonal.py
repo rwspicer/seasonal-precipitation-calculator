@@ -318,6 +318,14 @@ def sum_grids_by_ranges(monthly, dates, n_days=None, num_process = 1,
         # index = row, col
         bounds = dates.grids.reshape(real_shape)[:,row,col]\
             .reshape(bounds_shape)
+
+        if n_days:
+            bounds[:,1] = bounds[:,0] + np.timedelta64(n_days,'D')
+        
+        if disp_bounds:
+            print(bounds)
+            disp_bounds=False
+
         year_idx = 0
         if num_process == 1:
             process_pixel_warper(
